@@ -1,6 +1,6 @@
 @echo off
 echo Checking if Node.js is installed...
-node -v >nul 2>&1
+call node -v >nul 2>&1
 if %errorlevel% neq 0 (
     echo Node.js is not installed. Please install Node.js from https://nodejs.org/
     pause
@@ -11,10 +11,10 @@ echo Node.js is installed.
 echo Installing npm dependencies...
 call npm install
 
-echo Installation complete. Press any key to start the bot...
+echo Installation complete. 
 
 echo Starting the bot...
-npm start
+call npm start
 
 echo Bot has stopped. Press any key to exit...
 pause
