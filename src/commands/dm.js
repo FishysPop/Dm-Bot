@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, Role } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlags, Role } = require('discord.js');
 require("dotenv").config();
 
 module.exports = {
@@ -48,8 +48,8 @@ module.exports = {
     },
     options: {
         devOnly: false,
-        userPermissions: [PermissionFlagsBits.Administrator], 
-        botPermissions: [PermissionFlagsBits.SendMessages],
+        userPermissions: ['Administrator'],
+        botPermissions: ['SendMessages'],
         deleted: false,
     },
 };
