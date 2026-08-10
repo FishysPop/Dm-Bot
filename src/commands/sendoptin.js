@@ -7,6 +7,7 @@ const {
     PermissionFlagsBits,
     ChannelType,
 } = require('discord.js');
+const { isOptInEnabled } = require('../utils/optinStorage');
 require('dotenv').config();
 
 module.exports = {
@@ -22,6 +23,13 @@ module.exports = {
         ),
 
     run: async ({ interaction }) => {
+        if (!isOptInEnabled()) {
+            return interaction.reply({
+                content: 'The opt-in/opt-out system is currently disabled.',
+                ephemeral: true,
+            });
+        }
+
         if (interaction.user.id !== process.env.OWNER && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
             return interaction.reply({
                 content: 'Only administrators can run this command.',

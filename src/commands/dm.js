@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, Role } = require('discord.js');
-const { hasOptedIn } = require('../utils/optinStorage');
+const { hasOptedIn, isOptInEnabled } = require('../utils/optinStorage');
 const { parseDmError } = require('../utils/dmErrorHandler');
 require('dotenv').config();
 
@@ -21,7 +21,9 @@ module.exports = {
         const target = interaction.options.getMentionable('target');
         await interaction.deferReply({ ephemeral: true });
 
-        const finalMessage = `${messageContent}\n\n-# Run /optout to disable dms.`;
+        const finalMessage = isOptInEnabled()
+            ? `${messageContent}\n\n-# Run /optout to disable dms.`
+            : messageContent;
 
         if (target.user) {
             if (!hasOptedIn(target.user.id)) {

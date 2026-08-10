@@ -1,7 +1,16 @@
-const { hasOptedIn, optIn, optOut } = require('../../utils/optinStorage');
+const { hasOptedIn, optIn, optOut, isOptInEnabled } = require('../../utils/optinStorage');
 
 module.exports = async (interaction) => {
     if (!interaction.isButton()) return;
+
+    if (interaction.customId === 'optin_btn' || interaction.customId === 'optout_btn') {
+        if (!isOptInEnabled()) {
+            return interaction.reply({
+                content: 'The opt-in/opt-out system is currently disabled.',
+                ephemeral: true,
+            });
+        }
+    }
 
     if (interaction.customId === 'optin_btn') {
         if (hasOptedIn(interaction.user.id)) {

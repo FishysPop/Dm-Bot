@@ -1,8 +1,15 @@
+require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 
 const dataDir = path.join(__dirname, '../../data');
 const filePath = path.join(dataDir, 'optin.json');
+
+function isOptInEnabled() {
+    const envVal = process.env.ENABLE_OPT_IN_OUT ?? process.env.REQUIRE_OPT_IN ?? process.env.ENABLE_OPT_IN;
+    if (envVal === undefined) return true;
+    return envVal.toLowerCase() === 'true';
+}
 
 function ensureDataFile() {
     if (!fs.existsSync(dataDir)) {
@@ -25,6 +32,9 @@ function getOptedInUsers() {
 }
 
 function hasOptedIn(userId) {
+    if (!isOptInEnabled()) {
+        return true;
+    }
     const users = getOptedInUsers();
     return users.includes(userId);
 }
@@ -54,4 +64,5 @@ module.exports = {
     hasOptedIn,
     optIn,
     optOut,
+    isOptInEnabled,
 };

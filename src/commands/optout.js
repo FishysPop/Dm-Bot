@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { hasOptedIn, optOut } = require('../utils/optinStorage');
+const { hasOptedIn, optOut, isOptInEnabled } = require('../utils/optinStorage');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -7,6 +7,13 @@ module.exports = {
         .setDescription('Opt out of receiving direct messages'),
 
     run: async ({ interaction }) => {
+        if (!isOptInEnabled()) {
+            return interaction.reply({
+                content: 'The opt-in/opt-out system is currently disabled.',
+                ephemeral: true,
+            });
+        }
+
         if (!hasOptedIn(interaction.user.id)) {
             return interaction.reply({
                 content: 'You are not currently opted in to receive direct messages.',
