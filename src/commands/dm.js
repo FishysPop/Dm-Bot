@@ -1,49 +1,95 @@
-const { SlashCommandBuilder, PermissionFlags, Role } = require('discord.js');
-require("dotenv").config();
+const { SlashCommandBuilder, Role } = require('discord.js');
+const { hasOptedIn } = require('../utils/optinStorage');
+const { parseDmError } = require('../utils/dmErrorHandler');
+require('dotenv').config();
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('dm')
-        .setDescription('Send A Direct Message To A User Or A Role')
+        .setDescription('Send a direct message to an opted-in user or role')
         .addStringOption(option => option.setName('message').setDescription('The message to send').setRequired(true))
         .addMentionableOption(option => option.setName('target').setDescription('The user or role to DM').setRequired(true)),
 
-    run: async ({ interaction, client, handler }) => {
-        if (interaction.user.id !== process.env.OWNER) return interaction.reply({ content: "Only The Owner Can Run This Command", ephemeral: true });
+    run: async ({ interaction }) => {
+        if (interaction.user.id !== process.env.OWNER) {
+            return interaction.reply({ content: 'Only the owner can run this command.', ephemeral: true });
+        }
+
         const messageContent = interaction.options.getString('message');
         const target = interaction.options.getMentionable('target');
         await interaction.deferReply({ ephemeral: true });
 
-        if (target.user) { 
+        const finalMessage = `${messageContent}\n\n-# Run /optout to disable dms.`;
+
+        if (target.user) {
+            if (!hasOptedIn(target.user.id)) {
+                return interaction.editReply({
+                    content: `Could not send DM. ${target.user} has not opted in to receive direct messages.`,
+                    ephemeral: true,
+                });
+            }
+
             try {
-                await target.user.send(messageContent);
-                await interaction.editReply({ content: `Successfully sent a DM to ${target.user}`, ephemeral: true });
+                await target.user.send(finalMessage);
+                await interaction.editReply({ content: `Successfully sent DM to ${target.user}.`, ephemeral: true });
             } catch (error) {
                 console.error(`Failed to send DM to ${target.user.tag}:`, error);
-                if (error.code === 50007) {
-                    return interaction.editReply({ content: `Could not DM ${target.user}. They likely have DMs disabled.`, ephemeral: true });
-                }
-                return interaction.editReply({ content: 'Failed to send DM. An unknown error occurred.', ephemeral: true });
+                const reason = parseDmError(error);
+                return interaction.editReply({
+                    content: `Failed to send DM to ${target.user}.\n\n> Reason: ${reason}`,
+                    ephemeral: true,
+                });
             }
-        } else if (target instanceof Role) { 
+        } else if (target instanceof Role) {
             const members = await target.guild.members.fetch();
-            const roleMembers = members.filter(member => member.roles.cache.has(target.id)); 
+            const roleMembers = members.filter(member => member.roles.cache.has(target.id) && !member.user.bot);
+
             let successfulDMs = 0;
             let failedDMs = 0;
+            let skippedDMs = 0;
+            const failureBreakdown = {};
 
-            const dmPromises = roleMembers.map(async (member) => {
+            for (const [, member] of roleMembers) {
+                if (!hasOptedIn(member.user.id)) {
+                    skippedDMs++;
+                    continue;
+                }
+
                 try {
-                    await member.send(messageContent);
+                    await member.send(finalMessage);
                     successfulDMs++;
                 } catch (error) {
                     console.error(`Failed to send DM to ${member.user.tag}:`, error);
                     failedDMs++;
+
+                    const reason = parseDmError(error);
+                    failureBreakdown[reason] = (failureBreakdown[reason] || 0) + 1;
+
+                    if (error.code === 20026) {
+                        return interaction.editReply({
+                            content: `Broadcast aborted.\n\n> Reason: ${reason}\n\nProgress before interruption:\n- Successful: ${successfulDMs}\n- Failed: ${failedDMs}\n- Skipped (not opted in): ${skippedDMs}`,
+                            ephemeral: true,
+                        });
+                    }
                 }
+
+                await sleep(250);
+            }
+
+            let summary = `Broadcast completed.\n- Successful: ${successfulDMs}\n- Skipped (not opted in): ${skippedDMs}\n- Failed: ${failedDMs}`;
+            if (failedDMs > 0) {
+                summary += '\n\nFailure Reasons:';
+                for (const [reason, count] of Object.entries(failureBreakdown)) {
+                    summary += `\n> ${count}x - ${reason}`;
+                }
+            }
+
+            await interaction.editReply({
+                content: summary,
+                ephemeral: true,
             });
-
-            await Promise.all(dmPromises);
-
-            await interaction.editReply({ content: `Successfully sent DMs to ${successfulDMs} members. Failed to send DMs to ${failedDMs} members.`, ephemeral: true });
         }
     },
     options: {
