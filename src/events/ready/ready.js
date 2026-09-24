@@ -1,7 +1,9 @@
 const Discord = require('discord.js');
+const { startScheduler } = require('../../utils/scheduleExecutor');
 
 module.exports = (c, client, handler) => {
     console.log(`${c.user.username} is ready!`);
+    startScheduler(client);
     client.application.fetch().then(app => { 
         const inviteLink = client.generateInvite({  
           scopes: [
