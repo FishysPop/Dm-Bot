@@ -1,15 +1,19 @@
 const {
     SlashCommandBuilder,
-    ModalBuilder,
-    TextInputBuilder,
-    TextInputStyle,
-    ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
     EmbedBuilder,
+    ActionRowBuilder,
     PermissionFlagsBits,
 } = require('discord.js');
 const { getActiveSchedules, getScheduleById, cancelSchedule } = require('../utils/scheduleStorage');
+const { parseDateTime } = require('../utils/dateParser');
+const {
+    getDraft,
+    setDraft,
+    buildDraftPanel,
+    countEligibleRecipients,
+} = require('../utils/scheduleDrafts');
 require('dotenv').config();
 
 module.exports = {
@@ -19,7 +23,7 @@ module.exports = {
         .addSubcommand(subcommand =>
             subcommand
                 .setName('create')
-                .setDescription('Schedule a new direct message broadcast')
+                .setDescription('Configure a scheduled direct message broadcast using an interactive panel')
                 .addRoleOption(option =>
                     option
                         .setName('target')
@@ -37,6 +41,18 @@ module.exports = {
                             { name: 'Weekly', value: 'weekly' },
                             { name: 'Monthly', value: 'monthly' }
                         )
+                )
+                .addStringOption(option =>
+                    option
+                        .setName('time')
+                        .setDescription('Scheduled time (e.g. in 2 hours, tomorrow, or YYYY-MM-DD HH:mm UTC)')
+                        .setRequired(false)
+                )
+                .addStringOption(option =>
+                    option
+                        .setName('message')
+                        .setDescription('The announcement or message to broadcast')
+                        .setRequired(false)
                 )
         )
         .addSubcommand(subcommand =>
@@ -69,35 +85,42 @@ module.exports = {
         const subcommand = interaction.options.getSubcommand();
 
         if (subcommand === 'create') {
+            const guildId = interaction.guild?.id || 'unknown';
+            const userId = interaction.user.id;
+            const draft = getDraft(guildId, userId);
+
             const targetRole = interaction.options.getRole('target');
-            const isEveryoneRole = targetRole && targetRole.id === interaction.guild.id;
-            const targetId = (targetRole && !isEveryoneRole) ? targetRole.id : 'everyone';
-            const repeat = interaction.options.getString('repeat') || 'none';
+            if (targetRole) {
+                const isEveryone = targetRole.id === interaction.guild.id;
+                draft.targetType = isEveryone ? 'everyone' : 'role';
+                draft.targetRoleId = isEveryone ? null : targetRole.id;
+                draft.targetRoleName = isEveryone ? '@everyone' : targetRole.name;
+            }
 
-            const modal = new ModalBuilder()
-                .setCustomId(`sched_modal_${targetId}_${repeat}`)
-                .setTitle('Schedule DM Broadcast');
+            const repeat = interaction.options.getString('repeat');
+            if (repeat) {
+                draft.repeat = repeat;
+            }
 
-            const dateInput = new TextInputBuilder()
-                .setCustomId('datetime')
-                .setLabel('Date & Time (UTC or relative)')
-                .setStyle(TextInputStyle.Short)
-                .setPlaceholder('YYYY-MM-DD HH:mm UTC or relative like in 2 hours')
-                .setRequired(true);
+            const timeInput = interaction.options.getString('time');
+            if (timeInput) {
+                const parsed = parseDateTime(timeInput);
+                if (parsed.success) {
+                    draft.timestamp = parsed.timestamp;
+                    draft.preset = 'custom';
+                }
+            }
 
-            const messageInput = new TextInputBuilder()
-                .setCustomId('message')
-                .setLabel('Message to Broadcast')
-                .setStyle(TextInputStyle.Paragraph)
-                .setPlaceholder('Type the announcement or message to broadcast...')
-                .setRequired(true);
+            const messageInput = interaction.options.getString('message');
+            if (messageInput) {
+                draft.message = messageInput;
+            }
 
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(dateInput),
-                new ActionRowBuilder().addComponents(messageInput)
-            );
+            setDraft(guildId, userId, draft);
 
-            return interaction.showModal(modal);
+            const count = await countEligibleRecipients(interaction.guild, draft.targetType, draft.targetRoleId);
+            const panel = buildDraftPanel(draft, count);
+            return interaction.reply(panel);
         }
 
         if (subcommand === 'list') {
